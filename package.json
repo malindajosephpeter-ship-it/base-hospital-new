@@ -1,0 +1,13 @@
+{
+  "name": "bhms",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Base Hospital Management System — cross-device sync backed by Netlify Database",
+  "dependencies": {
+    "@netlify/database": "^1.0.0"
+  },
+  "devDependencies": {
+    "@netlify/functions": "^5.3.0"
+  }
+}
