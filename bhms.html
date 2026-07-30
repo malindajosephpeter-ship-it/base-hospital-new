@@ -51,8 +51,8 @@ input,select,textarea{font-family:inherit;font-size:14px}
 .fld .glow-wrap::after{content:"";position:absolute;inset:2px;border-radius:9px;background:var(--bg);z-index:0}
 .fld .glow-wrap input{border:none;position:relative;z-index:1;background:transparent}
 .fld .glow-wrap input:focus{background:transparent}
-/* textbox za kupishana: ya pili (na zinazofuata kwa hatua mbili) zizunguke kinyume */
-.fld:nth-of-type(even) .glow-wrap::before{animation:borderRunRev 5s linear infinite}
+/* textbox za kupishana: ya pili izunguke kinyume */
+.fld+.fld .glow-wrap::before{animation:borderRunRev 5s linear infinite}
 @keyframes borderRun{0%{transform:translate(-50%,-50%) rotate(0)}100%{transform:translate(-50%,-50%) rotate(360deg)}}
 @keyframes borderRunRev{0%{transform:translate(-50%,-50%) rotate(360deg)}100%{transform:translate(-50%,-50%) rotate(0)}}
 .btn-primary{width:100%;padding:13px;background:var(--navy);color:#fff;border-radius:10px;font-weight:600;font-size:15px;margin-top:8px;transition:.2s}
@@ -64,6 +64,12 @@ input,select,textarea{font-family:inherit;font-size:14px}
 @keyframes arrowSlide{0%,100%{transform:translateX(0)}50%{transform:translateX(5px)}}
 .err{color:var(--red);font-size:13px;text-align:center;margin-top:12px;min-height:18px}
 .hint{margin-top:18px;padding-top:16px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);text-align:center;line-height:1.7}
+/* Dokezo la nenosiri juu ya fomu ya kuingia */
+.hint-top{margin:0 0 22px;padding:13px 14px 11px;border:1px solid var(--line);border-top:1px solid var(--line);border-radius:12px;background:var(--bg);line-height:1.6}
+.hint-top .hint-title{display:block;font-size:11px;font-weight:700;color:var(--head);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.hint-top .hint-grid{display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;text-align:left}
+.hint-top .hint-grid code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--ink)}
+.hint-top .hint-note{margin-top:9px;font-size:10.5px;opacity:.85}
 
 /* ---------- APP SHELL ---------- */
 #app{display:none;min-height:100vh}
@@ -279,6 +285,20 @@ tr.clickable:hover td{background:var(--bg)}
     <div class="logo"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg></div>
     <h1>BHMS</h1>
     <p>Base Hospital Management System</p>
+    <!-- Dokezo la nenosiri (akaunti za mfano) — huonyeshwa/hufichwa kwenye Mipangilio -->
+    <div class="hint hint-top" id="demoHint">
+      <span class="hint-title">🔑 Dokezo la nenosiri</span>
+      <div class="hint-grid">
+        <span><code>admin</code> / <code>admin123</code></span>
+        <span><code>director</code> / <code>dir123</code></span>
+        <span><code>doctor</code> / <code>doc123</code></span>
+        <span><code>nurse</code> / <code>nur123</code></span>
+        <span><code>reception</code> / <code>rec123</code></span>
+        <span><code>pharmacy</code> / <code>pha123</code></span>
+        <span><code>accountant</code> / <code>acc123</code></span>
+      </div>
+      <div class="hint-note">Akaunti za mfano. Badilisha nenosiri baada ya kuingia.</div>
+    </div>
     <div class="fld"><label>Jina la Mtumiaji</label><div class="glow-wrap"><input id="lu" placeholder="mfano: admin" autocomplete="off"></div></div>
     <div class="fld"><label>Nenosiri</label><div class="glow-wrap"><input id="lp" type="password" placeholder="••••••" oninput="checkLoginReady()"></div></div>
     <button class="btn-primary" id="loginBtn" onclick="doLogin()">Ingia</button>
