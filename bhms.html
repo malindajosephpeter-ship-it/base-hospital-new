@@ -64,6 +64,14 @@ input,select,textarea{font-family:inherit;font-size:14px}
 @keyframes arrowSlide{0%,100%{transform:translateX(0)}50%{transform:translateX(5px)}}
 .err{color:var(--red);font-size:13px;text-align:center;margin-top:12px;min-height:18px}
 .hint{margin-top:18px;padding-top:16px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);text-align:center;line-height:1.7}
+/* Vidokezo vya majina/nenosiri kwenye login (akaunti za mfano) */
+.hint .hint-title{display:block;font-weight:700;color:var(--head);font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.hint-list{display:flex;flex-direction:column;gap:5px;text-align:left;max-height:min(34vh,220px);overflow-y:auto}
+.hint-row{display:flex;align-items:center;gap:8px;width:100%;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-size:11.5px;color:var(--muted);cursor:pointer;transition:.15s}
+.hint-row:hover{border-color:var(--teal);color:var(--ink)}
+.hint-row .hint-role{flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hint-row code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--head);background:var(--card);border:1px solid var(--line);border-radius:5px;padding:1px 6px;flex:0 0 auto}
+.hint-note{display:block;margin-top:9px;font-size:11px}
 
 /* ---------- APP SHELL ---------- */
 #app{display:none;min-height:100vh}
@@ -283,6 +291,7 @@ tr.clickable:hover td{background:var(--bg)}
     <div class="fld"><label>Nenosiri</label><div class="glow-wrap"><input id="lp" type="password" placeholder="••••••" oninput="checkLoginReady()"></div></div>
     <button class="btn-primary" id="loginBtn" onclick="doLogin()">Ingia</button>
     <div class="err" id="lerr"></div>
+    <div class="hint" id="demoHint"></div>
   </div>
 </div>
 
@@ -3039,7 +3048,29 @@ function toggleTheme(){
 }
 function tick(){$('#clock').textContent=new Date().toLocaleTimeString('sw-TZ')}
 setInterval(tick,1000);tick();
-function applyDemoHint(){const h=$('#demoHint');if(h)h.style.display=(db.settings&&db.settings.showDemoAccounts===false)?'none':''}
+/* Vidokezo vya kuingia kwenye ukurasa wa login: huonyesha jina la mtumiaji na
+   nenosiri la kila akaunti iliyo na ruhusa ya kuingia. Admin anaweza kuvificha
+   kwenye Mipangilio (showDemoAccounts=false). */
+function applyDemoHint(){
+  const h=$('#demoHint');if(!h)return;
+  if(db.settings&&db.settings.showDemoAccounts===false){h.style.display='none';h.innerHTML='';return}
+  const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const accs=(db.users||[]).filter(u=>u.user&&u.pass);
+  if(!accs.length){h.style.display='none';h.innerHTML='';return}
+  h.style.display='';
+  h.innerHTML=`<span class="hint-title">🔑 Vidokezo vya kuingia</span>
+    <div class="hint-list">${accs.map(u=>`
+      <button type="button" class="hint-row" data-u="${esc(u.user)}" data-p="${esc(u.pass)}" title="Bofya kujaza taarifa hizi">
+        <span class="hint-role">${esc(u.role||u.name)}</span>
+        <code>${esc(u.user)}</code><code>${esc(u.pass)}</code>
+      </button>`).join('')}</div>
+    <span class="hint-note">Bofya akaunti yoyote ili kujaza fomu. Admin anaweza kuvificha vidokezo hivi kwenye Mipangilio.</span>`;
+  h.querySelectorAll('.hint-row').forEach(b=>b.addEventListener('click',()=>useHint(b.dataset.u,b.dataset.p)));
+}
+function useHint(u,p){
+  $('#lu').value=u;$('#lp').value=p;$('#lerr').textContent='';
+  checkLoginReady();$('#loginBtn').focus();
+}
 applyDemoHint();
 $('#langbtn').textContent=lang==='sw'?'SW':'EN';
 function toggleSidebar(force){
