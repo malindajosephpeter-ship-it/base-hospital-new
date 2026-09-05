@@ -285,23 +285,16 @@ tr.clickable:hover td{background:var(--bg)}
     <div class="logo"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg></div>
     <h1>BHMS</h1>
     <p>Base Hospital Management System</p>
-    <!-- Dokezo la nenosiri (akaunti za mfano) — huonyeshwa/hufichwa kwenye Mipangilio -->
+    <!-- Akaunti ya cloud huhifadhi data kwa usalama kwa kila mtumiaji. -->
     <div class="hint hint-top" id="demoHint">
-      <span class="hint-title">🔑 Dokezo la nenosiri</span>
-      <div class="hint-grid">
-        <span><code>admin</code> / <code>admin123</code></span>
-        <span><code>director</code> / <code>dir123</code></span>
-        <span><code>doctor</code> / <code>doc123</code></span>
-        <span><code>nurse</code> / <code>nur123</code></span>
-        <span><code>reception</code> / <code>rec123</code></span>
-        <span><code>pharmacy</code> / <code>pha123</code></span>
-        <span><code>accountant</code> / <code>acc123</code></span>
-      </div>
-      <div class="hint-note">Akaunti za mfano. Badilisha nenosiri baada ya kuingia.</div>
+      <span class="hint-title">☁️ Cloud Sync</span>
+      <div class="hint-note">Ingia kwa barua pepe ileile kwenye kifaa chochote ili kupata data yako iliyohifadhiwa.</div>
     </div>
-    <div class="fld"><label>Jina la Mtumiaji</label><div class="glow-wrap"><input id="lu" placeholder="mfano: admin" autocomplete="off"></div></div>
+    <div class="fld hidden" id="nameField"><label>Jina Kamili</label><div class="glow-wrap"><input id="ln" placeholder="Jina lako" autocomplete="name"></div></div>
+    <div class="fld"><label>Barua Pepe</label><div class="glow-wrap"><input id="lu" type="email" placeholder="jina@example.com" autocomplete="email"></div></div>
     <div class="fld"><label>Nenosiri</label><div class="glow-wrap"><input id="lp" type="password" placeholder="••••••" oninput="checkLoginReady()"></div></div>
     <button class="btn-primary" id="loginBtn" onclick="doLogin()">Ingia</button>
+    <button class="btn btn-ghost" id="signupToggle" onclick="toggleSignup()" style="width:100%;margin-top:10px">Fungua akaunti mpya</button>
     <div class="err" id="lerr"></div>
   </div>
 </div>
@@ -313,7 +306,7 @@ tr.clickable:hover td{background:var(--bg)}
     <div class="brand"><span class="dot" id="brandIcon"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg></span><span id="brandName">BHMS</span></div>
     <div class="spacer"></div>
     <div class="clock" id="clock"></div>
-    <span id="syncDot" title="Inaunganisha…" style="width:10px;height:10px;border-radius:50%;background:#9ca3af;display:inline-block;flex:0 0 auto" aria-label="Hali ya usawazishaji"></span>
+    <span id="syncDot" title="Inaunganisha…" style="width:10px;height:10px;border-radius:50%;background:#9ca3af;display:inline-block;flex:0 0 auto" aria-label="Hali ya usawazishaji"></span><span id="syncStatus" style="font-size:12px;color:var(--muted);white-space:nowrap">Saving...</span>
     <button class="icon-btn" onclick="toggleLang()" title="Badili lugha / Change language" id="langbtn">SW</button>
     <button class="icon-btn" onclick="toggleTheme()" title="Badili mwanga/giza" id="themebtn">☀</button>
     <div class="user-chip" id="userChip" onclick="myProfile()" style="cursor:pointer" title="Bofya kuona taarifa zako"><span class="av" id="uav">A</span><span id="uname">—</span></div>
@@ -366,7 +359,7 @@ tr.clickable:hover td{background:var(--bg)}
 </div>
 
 <script>
-/* ============ DATA LAYER (localStorage) ============ */
+/* ============ DATA LAYER (Netlify Database is the source of truth) ============ */
 const DB_KEY='bhms_db_v1';
 const seed={
   users:[
@@ -493,11 +486,11 @@ const seed={
     ],
   },
 };
-let db=load();
-function load(){
+let db=structuredClone(seed);
+let legacyLocalData=loadLegacyLocal();
+function normalizeData(input){
   try{
-    const s=localStorage.getItem(DB_KEY);
-    let d=s?JSON.parse(s):structuredClone(seed);
+    let d=input&&typeof input==='object'?structuredClone(input):structuredClone(seed);
     // migration: hakikisha sehemu zote mpya zipo
     ['messages','store','storeMoves','audit','feedback','journeys'].forEach(k=>{if(!d[k])d[k]=structuredClone(seed[k])});
     if(!d.settings)d.settings=structuredClone(seed.settings);
@@ -509,88 +502,82 @@ function load(){
     return d;
   }catch(e){return structuredClone(seed)}
 }
-function save(){db._ts=Date.now();localStorage.setItem(DB_KEY,JSON.stringify(db));scheduleCloudPush()}
+function loadLegacyLocal(){
+  try{const raw=localStorage.getItem(DB_KEY);return raw?normalizeData(JSON.parse(raw)):null}catch(e){return null}
+}
+function save(){db._ts=Date.now();cloudDirty=true;scheduleCloudPush()}
 
 /* ============ CLOUD SYNC (cross-device, Netlify Database) ============ */
-/* Hati nzima ya `db` huhifadhiwa kama hati moja kwenye Netlify Database kupitia
-   /api/state. Kila kifaa hupakua hali ya hivi karibuni wakati wa kuanza, husukuma
-   mabadiliko yake, na huangalia mara kwa mara mabadiliko kutoka vifaa vingine.
-   Suluhu ya migongano ni last-write-wins kwa kutumia muhuri wa muda (db._ts). */
 const CLOUD_URL='/api/state';
-let _cloudTimer=null,_cloudPushing=false,_cloudPulling=false,_cloudOn=true,_cloudPending=false;
+let cloudTimer=null,cloudPollTimer=null,cloudRetryTimer=null,cloudPushing=false,cloudPulling=false,cloudDirty=false,cloudPending=false,cloudReady=false,cloudVersion=0,cloudRetryCount=0;
 function setSyncStatus(state){
-  const el=document.getElementById('syncDot');if(!el)return;
-  const map={ok:['#16a34a','Imesawazishwa (cloud)'],sync:['#f59e0b','Inasawazisha…'],off:['#9ca3af','Nje ya mtandao — itasawazisha baadaye']};
-  const m=map[state]||map.off;el.style.background=m[0];el.title=m[1];
+  const el=document.getElementById('syncDot'),text=document.getElementById('syncStatus');if(!el)return;
+  const map={saved:['#16a34a','Saved ✓'],saving:['#f59e0b','Saving...'],failed:['#dc2626','Sync failed — retrying...']};
+  const m=map[state]||map.saving;el.style.background=m[0];el.title=m[1];if(text)text.textContent=m[1];
 }
-function applyRemoteData(data,ts){
-  db=data;db._ts=ts;
-  localStorage.setItem(DB_KEY,JSON.stringify(db));
+function applyRemoteData(data,version){
+  db=normalizeData(data);cloudVersion=version;
   if(currentUser&&$('#app').style.display!=='none'){
     applyBrand();applyDemoHint();
     if(!$('#modalBg').classList.contains('show'))refreshCurrent();
   }
 }
-async function cloudPull(){
-  if(!_cloudOn||_cloudPulling)return;
-  _cloudPulling=true;
+async function cloudPull(initial=false){
+  if(cloudPulling||cloudPushing||(!initial&&cloudDirty))return;
+  cloudPulling=true;
   try{
-    const r=await fetch(CLOUD_URL,{headers:{'accept':'application/json'}});
+    const r=await fetch(CLOUD_URL,{headers:{accept:'application/json'},credentials:'same-origin'});
+    if(r.status===401){showLogin();return}
     if(!r.ok)throw new Error('http '+r.status);
     const j=await r.json();
-    if(j&&j.data&&typeof j.ts==='number'){
-      if(j.ts>(db._ts||0))applyRemoteData(j.data,j.ts);
-    }else if(j&&j.data===null){
-      // Seva tupu (mara ya kwanza): tuma data ya hapa kama mbegu.
-      cloudPush(true);
+    if(initial&&!j.persisted){
+      const remote=normalizeData(j.data);
+      const localTs=Number(legacyLocalData?._ts)||0,remoteTs=Number(remote?._ts)||Number(j.updatedAt)||0;
+      db=localTs>remoteTs?normalizeData(legacyLocalData):remote;
+      cloudVersion=0;cloudDirty=true;
+      await cloudPush(true);
+    }else if(j.persisted&&Number(j.version)>cloudVersion){
+      applyRemoteData(j.data,Number(j.version));
+      cloudDirty=false;setSyncStatus('saved');
     }
-    setSyncStatus('ok');
-  }catch(e){setSyncStatus('off')}
-  finally{_cloudPulling=false}
+    cloudReady=true;
+  }catch(e){setSyncStatus('failed');scheduleCloudRetry()}
+  finally{cloudPulling=false}
 }
-async function cloudPush(){
-  if(!_cloudOn)return;
-  if(_cloudPushing){_cloudPending=true;return}
-  _cloudPushing=true;setSyncStatus('sync');
+async function cloudPush(force=false){
+  if(!currentUser||(!force&&!cloudDirty))return false;
+  if(cloudPushing){cloudPending=true;return false}
+  cloudPushing=true;setSyncStatus('saving');
+  const outgoing=structuredClone(db),baseVersion=cloudVersion;
   try{
-    const body=JSON.stringify({data:db,ts:db._ts||Date.now()});
-    const r=await fetch(CLOUD_URL,{method:'PUT',headers:{'content-type':'application/json'},body});
+    const body=JSON.stringify({data:outgoing,baseVersion});
+    const r=await fetch(CLOUD_URL,{method:'PUT',headers:{'content-type':'application/json'},credentials:'same-origin',body});
+    if(r.status===409){const conflict=await r.json();cloudVersion=Number(conflict.version)||cloudVersion;db=outgoing;cloudDirty=true;throw new Error('conflict')}
+    if(r.status===401){showLogin();return false}
     if(!r.ok)throw new Error('http '+r.status);
     const j=await r.json();
-    // Seva ina toleo jipya zaidi kuliko letu: lichukue.
-    if(j&&typeof j.ts==='number'&&!j.applied&&j.ts>(db._ts||0)){await cloudPull()}
-    setSyncStatus('ok');
-  }catch(e){setSyncStatus('off')}
+    cloudVersion=Number(j.version)||cloudVersion;cloudDirty=false;cloudRetryCount=0;
+    localStorage.removeItem(DB_KEY);legacyLocalData=null;setSyncStatus('saved');return true;
+  }catch(e){cloudDirty=true;setSyncStatus('failed');scheduleCloudRetry();return false}
   finally{
-    _cloudPushing=false;
-    if(_cloudPending){_cloudPending=false;scheduleCloudPush()}
+    cloudPushing=false;
+    if(cloudPending){cloudPending=false;scheduleCloudPush()}
   }
 }
 function scheduleCloudPush(){
-  if(!_cloudOn)return;
-  setSyncStatus('sync');
-  clearTimeout(_cloudTimer);
-  _cloudTimer=setTimeout(()=>cloudPush(),700); // debounce
+  if(!currentUser)return;
+  setSyncStatus('saving');clearTimeout(cloudTimer);
+  cloudTimer=setTimeout(()=>cloudPush(),500);
 }
-function startCloudSync(){
-  cloudPull();
-  setInterval(cloudPull,15000); // vuta mabadiliko ya vifaa vingine kila sekunde 15
-  // Sukuma mara moja ukifunga/kuficha ukurasa ili usipoteze mabadiliko ya mwisho.
-  window.addEventListener('beforeunload',()=>{if(_cloudOn&&navigator.sendBeacon){try{navigator.sendBeacon(CLOUD_URL,new Blob([JSON.stringify({data:db,ts:db._ts||Date.now()})],{type:'application/json'}))}catch(e){}}});
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')cloudPull()});
+function scheduleCloudRetry(){
+  clearTimeout(cloudRetryTimer);const delay=Math.min(30000,1000*(2**Math.min(cloudRetryCount++,5)));
+  cloudRetryTimer=setTimeout(()=>cloudDirty?cloudPush():cloudPull(),delay);
 }
-// Auto-sync: tab/dirisha lingine likibadilisha data, kurasa zinazoonekana zinasasishwa
-window.addEventListener('storage',e=>{
-  if(e.key!==DB_KEY||!e.newValue)return;
-  try{
-    const nd=JSON.parse(e.newValue);
-    db=nd;
-    if(currentUser&&$('#app').style.display!=='none'){
-      // sasisha page ya sasa bila kuvuruga modal iliyo wazi
-      if(!$('#modalBg').classList.contains('show')){refreshCurrent()}
-    }
-  }catch(x){}
-});
+async function startCloudSync(){
+  clearInterval(cloudPollTimer);setSyncStatus('saving');await cloudPull(true);
+  cloudPollTimer=setInterval(()=>cloudPull(),3000);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')cloudPull()},{once:true});
+}
 function refreshCurrent(){
   const fn={dash:renderDash,patients:renderPatients,journey:renderJourney,opd:renderOPD,ipd:renderIPD,lab:renderLab,pharmacy:renderPharmacy,referrals:renderReferrals,ambulance:renderAmbulance,payments:renderPayments,expenses:renderExpenses,payroll:renderPayroll,bank:renderBank,reports:renderReports,hr:renderHR,store:renderStore,chat:renderChat,audit:renderAudit,about:renderAbout,settings:renderSettings,data:renderData}[currentPage];
   if(fn)try{fn()}catch(x){}
@@ -646,11 +633,27 @@ function checkLoginReady(){
   const b=$('#loginBtn');if(!b)return;
   if(($('#lp').value||'').length>0)b.classList.add('ready');else b.classList.remove('ready');
 }
-function doLogin(){
-  const u=$('#lu').value.trim().toLowerCase(),p=$('#lp').value;
-  const f=db.users.find(x=>x.user.toLowerCase()===u&&x.pass===p);
-  if(!f){$('#lerr').textContent='Jina au nenosiri si sahihi.';return}
-  currentUser=f;$('#login').style.display='none';$('#app').style.display='block';
+let signupMode=false;
+function toggleSignup(){signupMode=!signupMode;$('#nameField').classList.toggle('hidden',!signupMode);$('#loginBtn').textContent=signupMode?'Fungua Akaunti':'Ingia';$('#signupToggle').textContent=signupMode?'Nina akaunti tayari':'Fungua akaunti mpya';$('#lerr').textContent=''}
+async function authRequest(payload){
+  const r=await fetch('/api/auth',{method:'POST',headers:{'content-type':'application/json'},credentials:'same-origin',body:JSON.stringify(payload)});
+  const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||'Ombi la akaunti limeshindwa.');return j;
+}
+async function doLogin(){
+  const email=$('#lu').value.trim().toLowerCase(),password=$('#lp').value,name=$('#ln').value.trim();
+  if(!email||!password||signupMode&&!name){$('#lerr').textContent='Jaza taarifa zote zinazohitajika.';return}
+  $('#loginBtn').disabled=true;$('#lerr').textContent=signupMode?'Inafungua akaunti…':'Inaingia…';
+  try{
+    const result=await authRequest({action:signupMode?'signup':'login',email,password,name});
+    if(signupMode&&!result.confirmed){$('#lerr').textContent='Akaunti imefunguliwa. Angalia barua pepe kuthibitisha akaunti, kisha ingia.';return}
+    window.location.reload();
+  }catch(e){$('#lerr').textContent=e.message}
+  finally{$('#loginBtn').disabled=false}
+}
+async function enterApp(identity){
+  const identityRole=(identity.roles||[]).find(r=>ROLE_PAGES[r]);
+  const f={id:identity.id,name:identity.name||identity.email||'Mtumiaji',user:identity.email||'',identityEmail:identity.email||'',role:identityRole||'Super Admin',phone:'',photo:''};
+  currentUser=f;await startCloudSync();$('#login').style.display='none';$('#app').style.display='block';
   $('#loginBtn').classList.remove('ready');
   $('#uname').textContent=f.name;
   const av=$('#uav');if(f.photo){av.innerHTML=`<img src="${f.photo}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`;av.style.padding='0'}else{av.textContent=f.name[0].toUpperCase();av.style.padding=''}
@@ -661,6 +664,14 @@ function doLogin(){
   checkResponsive();
   logAudit('Ameingia mfumoni');
   nav('dash');
+}
+function showLogin(){currentUser=null;cloudReady=false;clearInterval(cloudPollTimer);$('#app').style.display='none';$('#login').style.display='flex';applyDemoHint()}
+async function bootstrapAuth(){
+  try{
+    const params=new URLSearchParams(location.hash.slice(1)),confirmationToken=params.get('confirmation_token');
+    if(confirmationToken){await authRequest({action:'confirm',token:confirmationToken});history.replaceState(null,'',location.pathname+location.search);window.location.reload();return}
+    const r=await fetch('/api/auth',{credentials:'same-origin',headers:{accept:'application/json'}});if(!r.ok)return showLogin();const j=await r.json();if(j.user)await enterApp(j.user);else showLogin()
+  }catch(e){showLogin();$('#lerr').textContent='Imeshindwa kuunganisha akaunti. Jaribu tena.'}
 }
 function applyBrand(){
   const s=db.settings;
@@ -711,7 +722,6 @@ function myProfile(){
       <button class="btn btn-ghost" onclick="changeMyPassword()">🔑 Badilisha Nenosiri</button>
       <button class="btn btn-ghost" onclick="closeModal();toggleTheme()">🌓 Badili Mwanga/Giza</button>
       <button class="btn btn-ghost" onclick="closeModal();toggleLang()">🌐 Badili Lugha (SW/EN)</button>
-      ${isAdmin()?`<button class="btn btn-ghost" onclick="closeModal();userForm('${u.id}')">✏️ Hariri Taarifa Zangu</button>`:''}
     </div>
     <div class="full" style="border-top:1px solid var(--line);padding-top:12px;margin-top:6px">
       <button class="btn btn-ghost" style="width:100%;color:var(--red)" onclick="closeModal();logout()"><span style="font-size:15px">⏻</span> Logout (Toka Mfumoni)</button>
@@ -726,16 +736,12 @@ function changeMyPassword(){
     <div class="full"><label>Thibitisha nenosiri jipya <span class="req">*</span></label><input id="cp_new2" type="password"></div>
   `,()=>{
     const old=$('#cp_old').value,nw=$('#cp_new').value,nw2=$('#cp_new2').value;
-    if(old!==u.pass){alert('Nenosiri la sasa si sahihi.');return false}
-    if(!nw||nw.length<4){alert('Nenosiri jipya liwe na herufi 4 au zaidi.');return false}
+    if(!nw||nw.length<8){alert('Nenosiri jipya liwe na herufi 8 au zaidi.');return false}
     if(nw!==nw2){alert('Nenosiri jipya halilingani na uthibitisho.');return false}
-    u.pass=nw;
-    const dbu=db.users.find(x=>x.id===u.id);if(dbu)dbu.pass=nw;
-    logAudit('Amebadilisha nenosiri lake');save();
-    alert('Nenosiri limebadilishwa.');return true;
+    authRequest({action:'changePassword',currentPassword:old,newPassword:nw}).then(()=>{logAudit('Amebadilisha nenosiri lake');closeModal();alert('Nenosiri limebadilishwa.')}).catch(e=>alert(e.message));return false;
   });
 }
-function logout(){if(currentUser)logAudit('Ametoka mfumoni');currentUser=null;navHist=[];navIdx=-1;$('#app').style.display='none';$('#login').style.display='flex';$('#lu').value='';$('#lp').value='';$('#lerr').textContent='';applyDemoHint();}
+async function logout(){if(currentUser){logAudit('Ametoka mfumoni');await cloudPush()}try{await authRequest({action:'logout'})}catch(e){}currentUser=null;navHist=[];navIdx=-1;window.location.reload()}
 
 /* ============ NAV ============ */
 let navHist=[],navIdx=-1,navSkip=false,currentPage='dash';
@@ -2898,7 +2904,7 @@ function printReceipt(payId){
 /* ============ DATA & BACKUP ============ */
 function renderData(){
   $('#main').innerHTML=`
-  <div class="page-head"><div><h2>Data & Backup</h2><div class="sub">Data inahifadhiwa kwenye kifaa hiki (offline)</div></div></div>
+  <div class="page-head"><div><h2>Data & Backup</h2><div class="sub">Netlify Database ndiyo chanzo kikuu cha data; mabadiliko yanahifadhiwa kiotomatiki.</div></div></div>
   <div class="card"><div class="card-head"><h3>Hifadhi & Rejesha</h3></div>
     <div style="padding:22px;display:flex;gap:12px;flex-wrap:wrap">
       <button class="btn btn-add" onclick="exportData()">⬇ Pakua Backup (JSON)</button>
@@ -2939,7 +2945,7 @@ function exportCSV(){
   const blob=new Blob(['\ufeff'+csv],{type:'text/csv'});const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);a.download='wagonjwa.csv';a.click();
 }
-function resetData(){if(confirm('Hakika unataka kufuta DATA YOTE? Haiwezi kurudishwa.')){localStorage.removeItem(DB_KEY);db=structuredClone(seed);save();nav('dash')}}
+function resetData(){if(confirm('Hakika unataka kufuta DATA YOTE? Haiwezi kurudishwa.')){db=structuredClone(seed);save();nav('dash')}}
 
 /* ============ MODAL ENGINE (draggable) ============ */
 let saveCb=null;
@@ -3074,7 +3080,7 @@ function checkResponsive(){
   if(!small){toggleSidebar(false)} // skrini kubwa: sidebar daima ipo, overlay haijaonekana
 }
 window.addEventListener('resize',checkResponsive);checkResponsive();
-startCloudSync();
+bootstrapAuth();
 </script>
 </body>
 </html>
