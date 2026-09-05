@@ -517,7 +517,7 @@ function save(){db._ts=Date.now();localStorage.setItem(DB_KEY,JSON.stringify(db)
    mabadiliko yake, na huangalia mara kwa mara mabadiliko kutoka vifaa vingine.
    Suluhu ya migongano ni last-write-wins kwa kutumia muhuri wa muda (db._ts). */
 const CLOUD_URL='/api/state';
-let _cloudTimer=null,_cloudPushing=false,_cloudPulling=false,_cloudOn=true,_cloudPending=false;
+let _cloudPushing=false,_cloudPulling=false,_cloudOn=true,_cloudPending=false;
 function setSyncStatus(state){
   const el=document.getElementById('syncDot');if(!el)return;
   const map={ok:['#16a34a','Imesawazishwa (cloud)'],sync:['#f59e0b','Inasawazisha…'],off:['#9ca3af','Nje ya mtandao — itasawazisha baadaye']};
@@ -569,8 +569,7 @@ async function cloudPush(){
 function scheduleCloudPush(){
   if(!_cloudOn)return;
   setSyncStatus('sync');
-  clearTimeout(_cloudTimer);
-  _cloudTimer=setTimeout(()=>cloudPush(),700); // debounce
+  cloudPush();
 }
 function startCloudSync(){
   cloudPull();
