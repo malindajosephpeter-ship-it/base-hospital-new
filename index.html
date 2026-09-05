@@ -363,13 +363,13 @@ tr.clickable:hover td{background:var(--bg)}
 const DB_KEY='bhms_db_v1';
 const seed={
   users:[
-    {id:'U001',name:'Super Admin',user:'admin',pass:'admin123',role:'Super Admin',phone:'',photo:''},
-    {id:'U002',name:'Mkurugenzi',user:'director',pass:'dir123',role:'Hospital Director',phone:'255712000002',photo:''},
-    {id:'U003',name:'Dkt. mfano',user:'doctor',pass:'doc123',role:'Doctor',phone:'255712000003',specialty:'Mganga Mkuu',photo:''},
-    {id:'U004',name:'Muuguzi',user:'nurse',pass:'nur123',role:'Nurse',phone:'255712000004',photo:''},
-    {id:'U005',name:'Mpokeaji',user:'reception',pass:'rec123',role:'Receptionist',phone:'255712000005',photo:''},
-    {id:'U006',name:'Mfamasia',user:'pharmacy',pass:'pha123',role:'Pharmacist',phone:'255712000006',photo:''},
-    {id:'U007',name:'Mhasibu',user:'accountant',pass:'acc123',role:'Accountant',phone:'255712000007',photo:''},
+    {id:'U001',name:'Super Admin',user:'admin',role:'Super Admin',phone:'',photo:''},
+    {id:'U002',name:'Mkurugenzi',user:'director',role:'Hospital Director',phone:'255712000002',photo:''},
+    {id:'U003',name:'Dkt. mfano',user:'doctor',role:'Doctor',phone:'255712000003',specialty:'Mganga Mkuu',photo:''},
+    {id:'U004',name:'Muuguzi',user:'nurse',role:'Nurse',phone:'255712000004',photo:''},
+    {id:'U005',name:'Mpokeaji',user:'reception',role:'Receptionist',phone:'255712000005',photo:''},
+    {id:'U006',name:'Mfamasia',user:'pharmacy',role:'Pharmacist',phone:'255712000006',photo:''},
+    {id:'U007',name:'Mhasibu',user:'accountant',role:'Accountant',phone:'255712000007',photo:''},
   ],
   patients:[
     {id:'P-00001',name:'Asha Juma Mhina',sex:'Ke',dob:'1990-04-12',phone:'0712000001',nid:'19900412-00001',region:'Dar es Salaam',district:'Kinondoni',type:'OPD',pay:'Bima',insurer:'NHIF',nok:'Juma Mhina',date:'2026-06-01'},
@@ -652,7 +652,7 @@ async function doLogin(){
 }
 async function enterApp(identity){
   const identityRole=(identity.roles||[]).find(r=>ROLE_PAGES[r]);
-  const f={id:identity.id,name:identity.name||identity.email||'Mtumiaji',user:identity.email||'',identityEmail:identity.email||'',role:identityRole||'Super Admin',phone:'',photo:''};
+  const f={id:identity.id,name:identity.name||identity.email||'Mtumiaji',user:identity.email||'',identityEmail:identity.email||'',role:identityRole||'Receptionist',phone:'',photo:''};
   currentUser=f;await startCloudSync();$('#login').style.display='none';$('#app').style.display='block';
   $('#loginBtn').classList.remove('ready');
   $('#uname').textContent=f.name;
