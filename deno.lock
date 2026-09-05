@@ -12,7 +12,8 @@
     "packageJson": {
       "dependencies": [
         "npm:@netlify/database@1",
-        "npm:@netlify/functions@^5.3.0"
+        "npm:@netlify/functions@^5.3.0",
+        "npm:@netlify/identity@2"
       ]
     }
   }
