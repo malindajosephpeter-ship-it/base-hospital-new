@@ -507,7 +507,7 @@ function loadLegacyLocal(){
 }
 function save(){db._ts=Date.now();cloudDirty=true;scheduleCloudPush()}
 
-/* ============ CLOUD SYNC (cross-device, Netlify Database) ============ */
+/* ============ CLOUD SYNC (shared workspace, Netlify Database) ============ */
 const CLOUD_URL='/api/state';
 let cloudTimer=null,cloudPollTimer=null,cloudRetryTimer=null,cloudPushing=false,cloudPulling=false,cloudDirty=false,cloudPending=false,cloudReady=false,cloudVersion=0,cloudRetryCount=0;
 function setSyncStatus(state){
