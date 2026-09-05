@@ -3,6 +3,7 @@ import { getDatabase } from "@netlify/database";
 import { getUser, verifyRequestOrigin } from "@netlify/identity";
 
 const LEGACY_STATE_ID = "bhms";
+const WORKSPACE_KEY = "bhms";
 const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
 
 type AppRecord = Record<string, unknown>;
@@ -141,10 +142,24 @@ export default async (req: Request, _context: Context) => {
   const db = getDatabase();
 
   if (req.method === "GET") {
+    const workspaceRows = await db.sql`
+      SELECT id
+      FROM hospital_workspaces
+      WHERE workspace_key = ${WORKSPACE_KEY}
+    `;
+    if (!workspaceRows.length) return json({ error: "Workspace unavailable" }, 503);
+    const workspaceId = Number(workspaceRows[0].id);
+
+    await db.sql`
+      INSERT INTO workspace_members (workspace_id, user_id)
+      VALUES (${workspaceId}, ${user.id})
+      ON CONFLICT (workspace_id, user_id) DO NOTHING
+    `;
+
     const rows = await db.sql`
       SELECT data, version, updated_at
-      FROM user_app_state
-      WHERE owner_id = ${user.id}
+      FROM workspace_app_state
+      WHERE workspace_id = ${workspaceId}
     `;
 
     if (rows.length) {
@@ -205,28 +220,35 @@ export default async (req: Request, _context: Context) => {
     try {
       await client.query("BEGIN");
       const workspaceResult = await client.query(
-        `INSERT INTO hospital_workspaces (owner_id, updated_at)
+        `INSERT INTO hospital_workspaces (workspace_key, updated_at)
          VALUES ($1, NOW())
-         ON CONFLICT (owner_id) DO UPDATE SET updated_at = NOW()
+         ON CONFLICT (workspace_key) DO UPDATE SET updated_at = NOW()
          RETURNING id`,
-        [user.id],
+        [WORKSPACE_KEY],
       ) as { rows: Array<{ id: number }> };
       const workspaceId = Number(workspaceResult.rows[0].id);
 
+      await client.query(
+        `INSERT INTO workspace_members (workspace_id, user_id, last_seen_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (workspace_id, user_id) DO UPDATE SET last_seen_at = NOW()`,
+        [workspaceId, user.id],
+      );
+
       const stateResult = baseVersion === 0
         ? await client.query(
-          `INSERT INTO user_app_state (owner_id, data, version, updated_at)
+          `INSERT INTO workspace_app_state (workspace_id, data, version, updated_at)
            VALUES ($1, $2::jsonb, 1, NOW())
-           ON CONFLICT (owner_id) DO NOTHING
+           ON CONFLICT (workspace_id) DO NOTHING
            RETURNING version, updated_at`,
-          [user.id, serialized],
+          [workspaceId, serialized],
         )
         : await client.query(
-          `UPDATE user_app_state
+          `UPDATE workspace_app_state
            SET data = $2::jsonb, version = version + 1, updated_at = NOW()
-           WHERE owner_id = $1 AND version = $3
+           WHERE workspace_id = $1 AND version = $3
            RETURNING version, updated_at`,
-          [user.id, serialized, baseVersion],
+          [workspaceId, serialized, baseVersion],
         );
       const stateRows = (stateResult as { rows: Array<{ version: number; updated_at: string }> }).rows;
 
@@ -250,9 +272,10 @@ export default async (req: Request, _context: Context) => {
 
     if (!saved) {
       const current = await db.sql`
-        SELECT data, version, updated_at
-        FROM user_app_state
-        WHERE owner_id = ${user.id}
+        SELECT state.data, state.version, state.updated_at
+        FROM workspace_app_state AS state
+        JOIN hospital_workspaces AS workspace ON workspace.id = state.workspace_id
+        WHERE workspace.workspace_key = ${WORKSPACE_KEY}
       `;
       if (!current.length) return json({ error: "State unavailable" }, 409);
       return json({
