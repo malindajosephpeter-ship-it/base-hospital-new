@@ -524,12 +524,22 @@ function setSyncStatus(state){
   const m=map[state]||map.off;el.style.background=m[0];el.title=m[1];
 }
 function applyRemoteData(data,ts){
+  const activeUserId=currentUser&&currentUser.id;
   db=data;db._ts=ts;
   localStorage.setItem(DB_KEY,JSON.stringify(db));
+  if(activeUserId){
+    currentUser=(db.users||[]).find(u=>u.id===activeUserId)||null;
+    if(!currentUser){
+      $('#app').style.display='none';$('#login').style.display='flex';
+      $('#lerr').textContent='Akaunti hii imebadilishwa au kuondolewa. Ingia tena.';
+      return;
+    }
+    $('#uname').textContent=currentUser.name;
+  }
   if(currentUser&&$('#app').style.display!=='none'){
     applyBrand();applyDemoHint();
     if(!$('#modalBg').classList.contains('show'))refreshCurrent();
-  }
+  }else applyDemoHint();
 }
 async function cloudPull(){
   if(!_cloudOn||_cloudPulling)return;
@@ -554,7 +564,7 @@ async function cloudPush(){
   _cloudPushing=true;setSyncStatus('sync');
   try{
     const body=JSON.stringify({data:db,ts:db._ts||Date.now()});
-    const r=await fetch(CLOUD_URL,{method:'PUT',headers:{'content-type':'application/json'},body});
+    const r=await fetch(CLOUD_URL,{method:'PUT',headers:{'content-type':'application/json'},body,keepalive:true});
     if(!r.ok)throw new Error('http '+r.status);
     const j=await r.json();
     // Seva ina toleo jipya zaidi kuliko letu: lichukue.
@@ -574,17 +584,21 @@ function scheduleCloudPush(){
 }
 function startCloudSync(){
   cloudPull();
-  setInterval(cloudPull,15000); // vuta mabadiliko ya vifaa vingine kila sekunde 15
+  setInterval(cloudPull,5000); // vuta mabadiliko ya vifaa vingine kila sekunde 5
   // Sukuma mara moja ukifunga/kuficha ukurasa ili usipoteze mabadiliko ya mwisho.
   window.addEventListener('beforeunload',()=>{if(_cloudOn&&navigator.sendBeacon){try{navigator.sendBeacon(CLOUD_URL,new Blob([JSON.stringify({data:db,ts:db._ts||Date.now()})],{type:'application/json'}))}catch(e){}}});
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')cloudPull()});
+  window.addEventListener('focus',cloudPull);
+  window.addEventListener('online',()=>{cloudPull();cloudPush()});
 }
 // Auto-sync: tab/dirisha lingine likibadilisha data, kurasa zinazoonekana zinasasishwa
 window.addEventListener('storage',e=>{
   if(e.key!==DB_KEY||!e.newValue)return;
   try{
     const nd=JSON.parse(e.newValue);
+    const activeUserId=currentUser&&currentUser.id;
     db=nd;
+    if(activeUserId)currentUser=(db.users||[]).find(u=>u.id===activeUserId)||null;
     if(currentUser&&$('#app').style.display!=='none'){
       // sasisha page ya sasa bila kuvuruga modal iliyo wazi
       if(!$('#modalBg').classList.contains('show')){refreshCurrent()}
